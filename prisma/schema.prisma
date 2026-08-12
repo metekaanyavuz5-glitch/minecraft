@@ -1,0 +1,65 @@
+// Prisma schema for the mod-generator app.
+// SQLite for zero-config local usability (file: prisma/dev.db).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  projects     Project[]
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  namespace   String
+  theme       String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  textures    TextureAsset[]
+  structures  StructureAsset[]
+}
+
+// A generated block texture (16x16 PNG), produced by the procedural
+// image-generation module from a text prompt/seed.
+model TextureAsset {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  blockName  String
+  prompt     String
+  seed       Int
+  paletteJson String
+  pngData    Bytes
+  createdAt  DateTime @default(now())
+}
+
+// A voxel structure derived from a user-uploaded photo via the
+// image-to-asset (Gaussian-Splatting-inspired) pipeline.
+model StructureAsset {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  sourceImage   String
+  width         Int
+  height        Int
+  depth         Int
+  blockGridJson String
+  paletteJson   String
+  previewPngData Bytes
+  createdAt     DateTime @default(now())
+}
