@@ -51,6 +51,42 @@ The SQLite database lives at `./dev.db` (gitignored). No other services are
 required — everything (auth, image generation, voxelization, zip packaging)
 runs in-process.
 
+## Deploying to Vercel (or any serverless platform)
+
+Two things a local `npm run dev` doesn't force you to think about, but that
+break the build/runtime on Vercel if skipped:
+
+1. **The Prisma client must be generated during the build.** It's written
+   to `src/generated/prisma`, which is gitignored, so it doesn't exist in
+   the deployed repo until it's generated. `package.json`'s `build` script
+   already runs `prisma generate && next build` and there's a `postinstall`
+   script too, so a plain `vercel deploy` handles this automatically — no
+   action needed unless a custom build command overrides it.
+2. **`file:./dev.db` does not work in production.** Vercel's filesystem is
+   read-only (except `/tmp`, which doesn't persist across invocations or
+   deployments), so a local SQLite file can't be written to, and even if it
+   could, the data would vanish on the next cold start. Point `DATABASE_URL`
+   at a **hosted libSQL database** instead — e.g. [Turso](https://turso.tech):
+
+   ```bash
+   turso db create blockforge
+   turso db show blockforge --url        # -> DATABASE_URL
+   turso db tokens create blockforge      # -> DATABASE_AUTH_TOKEN
+   ```
+
+   Set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` as Vercel project env vars
+   (Project Settings → Environment Variables), along with `AUTH_SECRET`.
+   No code changes are needed — `src/lib/db.ts` already reads both and the
+   `@prisma/adapter-libsql` driver speaks the same protocol either way.
+3. After setting `DATABASE_URL` to the hosted database, run the migrations
+   against it once (locally, pointed at the remote URL, or via a Vercel
+   build hook): `npx prisma migrate deploy`.
+
+If the deploy still fails, check the Vercel build/function logs for the
+actual error — "Module not found: '@/generated/prisma/client'" means (1)
+above wasn't picked up; anything mentioning `SQLITE_READONLY`, "unable to
+open database file", or a 500 on login/signup means (2).
+
 ## Using a real image-generation API instead
 
 `generateTexture()` in `src/lib/textureGen.ts` is the single seam to swap.
